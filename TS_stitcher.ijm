@@ -1,32 +1,43 @@
 //description of this macro:
-//
-//future update: get input for min and max threshold values
-//
+//This macro will stitch PPL, XPL and FLO images taken with a microscope. You will need a grid of pictures, with 20% overlap between them.
+//It will keep your pictures aligned during the process, and subtract the background from PPL images
+//in order to run this macro, you will need a root folder (named after your sample), and inside this folder there should be the background image, and three other folders: PPL, XPL and FLO
+//each of these folders should have its respective images. The name of the image files does not matter, as long as they are IN ORDER
+//Originally, the macro will not save any of the intermediary images (PPL subtracted, for example), but will only save the final, stitched images.
+//This can be changed by selecting the appropriate menu checkbox
+
 Dialog.create("Message");
-	Dialog.addMessage("Select root folder (FLO, PPL, XPL and background should be INSIDE this folder");
+	Dialog.addMessage("To use this Macro you need your pictures sorted into 3 folders: PPL, XPL and FLO. No renaming necessary. \n"+
+	"These 3 folders should be inside a root folder, along with the background image, named 'background.tif' \n"+
+	"This macro currently supports A GRID OF UP TO 99 PICTURES"+
+	"Select root folder (FLO, PPL, XPL and background should be INSIDE this folder");
 	Dialog.show();
 folder=getDirectory("Select root folder (FLO, PPL, XPL and background should be INSIDE this folder");
 list = getFileList(folder);
 
-if (!File.exists(folder + "FLO") & !File.exists(folder + "XPL"))
+if (!File.exists(folder + "FLO") | !File.exists(folder + "XPL") | !File.exists(folder + "PPL"))
       exit("This directory does not seem right. It must contain the folders FLO, PPL and XPL");
 
-//must check if folder exists
-//check if FLO, PPL and XPL folders inside this folder
-
 Dialog.create("Enter information about thin section images matrix");
-	Dialog.addNumber("Matrix x (how many columns)", 0);
-	Dialog.addNumber("Matrix y (how many rows)", 0);
+	Dialog.addNumber("Matrix x (how many columns?)", 5);
+	Dialog.addNumber("Matrix y (how many rows?)", 4);
 	Dialog.addCheckbox("Save inter-step files? (ONLY RECOMMENDED FOR DEBUGGING)", false);
+	Dialog.addCheckbox("Threshold background image? Makes for brighter final PPL", true);
+	Dialog.addMessage("The values below are suggested for BX60 microscope");
+	Dialog.addNumber("Lower threshold for background", 37);
+	Dialog.addNumber("Upper threshold for background", 292);
 	Dialog.show();
 	matrix_x = Dialog.getNumber();
-	matrix_y = Dialog.getNumber();;
+	matrix_y = Dialog.getNumber();
 	save_files = Dialog.getCheckbox();
+	check_threshold = Dialog.getCheckbox();
+	lower_threshold = Dialog.getNumber();
+	upper_threshold = Dialog.getNumber();
 
 n_images = (matrix_x*matrix_y);
 
 if (File.exists(folder + "final"))
-      exit("The 'final' folder already exists!");
+      exit("The 'final' folder already exists! Check to see if no files in there! \n This macro will only run if no 'final' folder exists.");
 File.makeDirectory(folder + "final");
 if (save_files){
 
@@ -39,8 +50,10 @@ if (save_files){
 	//removing background and saving into PPL_subtracted folder
 	open(folder + "background.tif"); 
 	run("8-bit");
-	run("Window/Level...");
-	setMinAndMax(37, 292);
+	if (check_threshold){
+		run("Window/Level...");
+		setMinAndMax(lower_threshold, upper_threshold);
+	}
 	run("RGB Color");
 	run("Image Sequence...", "open=" + folder + "PPL/PPL_001.tif number=" +n_images+" sort");
 	run("Calculator Plus", "i1=PPL i2=background.tif operation=[Divide: i2 = (i1/i2) x k1 + k2] k1=128 k2=0 create");
@@ -81,7 +94,7 @@ if (save_files){
 		//update to the number of images your sample has in total (is less than 100)
 		if (n_images>9) {
 	
-			for (i=10; i<=80; i++){
+			for (i=10; i<=n_images; i++){
 				open("" + folder + "PPL_subtracted/0" +i+ ".tif");
 				//run("Split Channels");
 				open("" + folder + "FLO_renamed/FLO_0" +i+ ".tif");
@@ -137,6 +150,7 @@ if (save_files){
 	saveAs("Tiff", folder+"final/XPL.tif");
 	close();
 	close();
+	print("Command successfully finished!");
 }
 else{
 	// Get path to temp directory
@@ -145,7 +159,7 @@ else{
 	  exit("No temp directory available");
 	
 	// Create a directory in temp
-	temp_folder = tmp+"my-test-dir"+File.separator;
+	temp_folder = tmp+"my-temp-dir"+File.separator;
 	File.makeDirectory(temp_folder);
 	if (!File.exists(temp_folder))
 	  exit("Unable to create directory");
@@ -156,10 +170,12 @@ else{
 	print("removing background from PPL images");
 	open(folder + "background.tif"); 
 	run("8-bit");
-	run("Window/Level...");
-	setMinAndMax(37, 292);
+	if (check_threshold){
+		run("Window/Level...");
+		setMinAndMax(lower_threshold, upper_threshold);
+	}
 	run("RGB Color");
-	run("Image Sequence...", "open=" + folder + "PPL/PPL_001.tif number=" +n_images+" sort");
+	run("Image Sequence...", "open=" + folder + "PPL/PPL_001.tif number=" +n_images+" sort"); //the name of files does not matter for the image sequence
 	run("Calculator Plus", "i1=PPL i2=background.tif operation=[Divide: i2 = (i1/i2) x k1 + k2] k1=128 k2=0 create");
 	run("Image Sequence... ", "format=TIFF name=[PPL_] start=1 digits=3 save="+temp_folder);
 	close();
@@ -172,7 +188,7 @@ else{
 	//XPL
 	print("renaming XPL images");
 	run("Image Sequence...", "open=" + folder + "XPL/XPL_001.tif number=" + n_images +" sort");
-	run("Image Sequence... ", "format=TIFF name=[XPL_] start=1 digits=3 save="+temp_folder);
+	run("Image Sequence... ", "format=TIFF name=[XPL_] start=1 digits=3 save="+temp_folder); //it renames the files as they are saved (open w/ whatever name > save in order, rneamed)
 	run("Close All");
 	
 	//FLO
@@ -198,10 +214,10 @@ else{
 			close();
 		}
 		
-		//update to the number of images your sample has in total (is less than 100)
+		//currently this macro only supports a grid of up to 99 pictures
 		if (n_images>9) {
 	
-			for (i=10; i<=80; i++){
+			for (i=10; i<=n_images; i++){
 				open(temp_folder+"PPL_0" +i+ ".tif");
 				//run("Split Channels");
 				open(temp_folder+"FLO_0" +i+ ".tif");
@@ -272,8 +288,9 @@ else{
 	  exit("Unable to delete directory");
 	else
 	  print("Directory and files successfully deleted");  
-
-}  
+	print("Command successfully finished!");
+}
+print("End of macro");
       
        
         
